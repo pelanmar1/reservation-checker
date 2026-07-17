@@ -10,6 +10,8 @@ The app then checks CoverManager periodically and sends an email when at least o
 
 ## Local setup
 
+If you do not want any secrets in local files, skip `.env` and use environment variables in your shell session.
+
 1. Install dependencies:
 
 ```bash
@@ -28,7 +30,22 @@ npx playwright install chromium
 copy .env.example .env
 ```
 
-4. Configure SMTP in `.env` (required for email notifications):
+4. Configure SMTP (required for email notifications):
+
+Option A: local `.env` (quick)
+
+Option B: shell env vars only (no secrets written to disk), for example in PowerShell:
+
+```powershell
+$env:SMTP_HOST="..."
+$env:SMTP_PORT="587"
+$env:SMTP_SECURE="false"
+$env:SMTP_USER="..."
+$env:SMTP_PASS="..."
+$env:ALERT_FROM="..."
+```
+
+Required keys:
 
 - `SMTP_HOST`
 - `SMTP_PORT`
@@ -55,6 +72,8 @@ npm run check-once
 
 ## Deploy to Azure App Service
 
+For Azure, prefer App Service Application Settings (or Key Vault references) instead of `.env`.
+
 Fastest path from this repo:
 
 ```powershell
@@ -79,6 +98,22 @@ This script will:
 - deploy current folder with `az webapp up`
 
 After deployment, open the app URL and configure date range + destination email in the UI.
+
+### Secrets without `.env` (recommended)
+
+Set SMTP values directly in App Service settings:
+
+```bash
+az webapp config appsettings set --name <app-name> --resource-group <rg> --settings \
+  SMTP_HOST=<smtp-host> \
+  SMTP_PORT=587 \
+  SMTP_SECURE=false \
+  SMTP_USER=<smtp-user> \
+  SMTP_PASS=<smtp-pass> \
+  ALERT_FROM=<from@email.com>
+```
+
+Optional stronger security: store SMTP secret in Key Vault and reference it from App Service settings.
 
 If you prefer manual CLI commands, use the section below.
 
