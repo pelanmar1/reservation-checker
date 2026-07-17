@@ -1,0 +1,19 @@
+{
+  "name": "covermanager-availability-watcher",
+  "version": "1.0.0",
+  "description": "Periodically checks reservation availability for a CoverManager restaurant",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "check-once": "node src/checker.js",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "nodemailer": "^6.9.16",
+    "playwright": "^1.55.0"
+  }
+}
