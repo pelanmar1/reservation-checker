@@ -70,6 +70,44 @@ If you want a quick check from env values:
 npm run check-once
 ```
 
+## Run on GitHub Actions (free-friendly)
+
+This repo includes a scheduled workflow at [.github/workflows/reservation-check.yml](.github/workflows/reservation-check.yml) that runs every 15 minutes and sends email when availability is found.
+
+### 1. Configure repository Variables
+
+In GitHub -> Settings -> Secrets and variables -> Actions -> Variables, add:
+
+- `RESTAURANT_URL` (fixed URL)
+- `START_DATE` (YYYY-MM-DD)
+- `END_DATE` (YYYY-MM-DD)
+- `TIMEZONE` (for example `America/Mexico_City`)
+- `PARTY_SIZE` (for example `2`)
+- `UNAVAILABLE_CLASSES` (for example `complete,close_date`)
+- `ALERT_TO` (destination email)
+
+### 2. Configure repository Secrets
+
+In GitHub -> Settings -> Secrets and variables -> Actions -> Secrets, add:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `ALERT_FROM`
+
+### 3. Run manually (optional)
+
+Go to Actions -> `Reservation Availability Check` -> `Run workflow`.
+
+You can optionally override date range and party size per run.
+
+### Notes
+
+- GitHub Actions mode does not host the web UI; config is managed in GitHub Variables/Secrets.
+- The workflow sends an email only when at least one date is available.
+
 ## Deploy to Azure App Service
 
 For Azure, prefer App Service Application Settings (or Key Vault references) instead of `.env`.
