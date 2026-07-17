@@ -85,6 +85,7 @@ In GitHub -> Settings -> Secrets and variables -> Actions -> Variables, add:
 - `PARTY_SIZE` (for example `2`)
 - `UNAVAILABLE_CLASSES` (for example `complete,close_date`)
 - `ALERT_TO` (destination email)
+- `DEBUG_ALWAYS_EMAIL` (`true` or `false`; when `true`, always sends an email with current availability snapshot)
 
 ### 2. Configure repository Secrets
 

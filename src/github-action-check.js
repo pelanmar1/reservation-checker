@@ -17,6 +17,13 @@ function getEnv(name, fallback = "") {
   return String(value).trim();
 }
 
+function toBool(value, fallback = false) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
 function parseUnavailableClasses() {
   return getEnv("UNAVAILABLE_CLASSES", "complete,close_date")
     .split(",")
@@ -25,6 +32,10 @@ function parseUnavailableClasses() {
 }
 
 function buildSummary(config, checkResult) {
+  const detailLines = checkResult.results.map((row) => {
+    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`;
+  });
+
   return [
     "Reservation availability found.",
     `Restaurant: ${config.restaurantUrl}`,
@@ -33,6 +44,28 @@ function buildSummary(config, checkResult) {
     `Available dates: ${checkResult.availableDates.join(", ")}`,
     `Checked at: ${checkResult.checkedAt}`,
     `Page URL: ${checkResult.pageUrl}`,
+    "",
+    "Availability details:",
+    ...detailLines,
+  ].join("\n");
+}
+
+function buildDebugSummary(config, checkResult) {
+  const detailLines = checkResult.results.map((row) => {
+    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`;
+  });
+
+  return [
+    "Debug run: sending current availability snapshot.",
+    `Restaurant: ${config.restaurantUrl}`,
+    `Range: ${config.startDate} to ${config.endDate}`,
+    `Party size: ${config.partySize}`,
+    `Available dates: ${checkResult.availableDates.join(", ") || "None"}`,
+    `Checked at: ${checkResult.checkedAt}`,
+    `Page URL: ${checkResult.pageUrl}`,
+    "",
+    "Availability details:",
+    ...detailLines,
   ].join("\n");
 }
 
@@ -57,6 +90,7 @@ async function main() {
     timezone: getEnv("TIMEZONE", "America/Mexico_City"),
     partySize: Number(getEnv("PARTY_SIZE", "2")),
     alertTo: getEnv("ALERT_TO"),
+    debugAlwaysEmail: toBool(getEnv("DEBUG_ALWAYS_EMAIL", "false"), false),
   };
 
   validateConfig({
@@ -81,13 +115,21 @@ async function main() {
     );
   }
 
-  if (checkResult.availableDates.length === 0) {
+  const hasAvailability = checkResult.availableDates.length > 0;
+  const shouldSendDebugEmail = config.debugAlwaysEmail;
+
+  if (!hasAvailability && !shouldSendDebugEmail) {
     console.log("No availability found. No email sent.");
     return;
   }
 
-  const subject = `Table availability found (${checkResult.availableDates.length} date(s))`;
-  const text = buildSummary(config, checkResult);
+  const subject = hasAvailability
+    ? `Table availability found (${checkResult.availableDates.length} date(s))`
+    : "Debug: current reservation availability snapshot";
+
+  const text = hasAvailability
+    ? buildSummary(config, checkResult)
+    : buildDebugSummary(config, checkResult);
 
   await sendAvailabilityEmail({
     to: config.alertTo,
@@ -95,7 +137,11 @@ async function main() {
     text,
   });
 
-  console.log("Availability found and email sent.");
+  if (hasAvailability) {
+    console.log("Availability found and email sent.");
+  } else {
+    console.log("Debug email sent with current availability snapshot.");
+  }
 }
 
 main().catch((error) => {
