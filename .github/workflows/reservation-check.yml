@@ -1,8 +1,6 @@
 name: Reservation Availability Check
 
 on:
-  schedule:
-    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       start_date:
