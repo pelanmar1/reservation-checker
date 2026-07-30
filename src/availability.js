@@ -26,20 +26,7 @@ function parseDate(value, fieldName) {
   return parsed;
 }
 
-async function checkAvailability(input) {
-  const config = {
-    restaurantUrl: input.restaurantUrl,
-    startDate: parseDate(input.startDate, "startDate"),
-    endDate: parseDate(input.endDate, "endDate"),
-    timezone: input.timezone || "America/Mexico_City",
-    partySize: Number(input.partySize || 2),
-    unavailableClasses: new Set(input.unavailableClasses || ["complete", "close_date"]),
-  };
-
-  if (config.endDate.isBefore(config.startDate, "day")) {
-    throw new Error("endDate must be on or after startDate");
-  }
-
+async function checkAvailabilityAttempt(config) {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
     viewport: { width: 1366, height: 1000 },
@@ -141,6 +128,41 @@ async function checkAvailability(input) {
   } finally {
     await browser.close();
   }
+}
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 5000;
+
+async function checkAvailability(input) {
+  const config = {
+    restaurantUrl: input.restaurantUrl,
+    startDate: parseDate(input.startDate, "startDate"),
+    endDate: parseDate(input.endDate, "endDate"),
+    timezone: input.timezone || "America/Mexico_City",
+    partySize: Number(input.partySize || 2),
+    unavailableClasses: new Set(input.unavailableClasses || ["complete", "close_date"]),
+  };
+
+  if (config.endDate.isBefore(config.startDate, "day")) {
+    throw new Error("endDate must be on or after startDate");
+  }
+
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`Attempt ${attempt}/${MAX_RETRIES}...`);
+      return await checkAvailabilityAttempt(config);
+    } catch (error) {
+      lastError = error;
+      const isTimeout = error.message && error.message.includes("Timeout");
+      if (!isTimeout || attempt === MAX_RETRIES) {
+        throw error;
+      }
+      console.log(`Attempt ${attempt} timed out, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
 }
 
 module.exports = {
