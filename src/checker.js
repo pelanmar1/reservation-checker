@@ -35,7 +35,7 @@ async function main() {
 
   for (const row of result.results) {
     console.log(
-      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`
+      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`
     );
   }
 

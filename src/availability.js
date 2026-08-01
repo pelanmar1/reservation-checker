@@ -202,10 +202,8 @@ async function checkAvailabilityAttempt(config) {
               })
               .filter(Boolean);
 
-        const timeSlots = [...new Set(fallbackSlots)];
         return {
-          timeSlots,
-          rawHourBox: data.hour_box || "",
+          timeSlots: [...new Set(fallbackSlots)],
         };
       }, {
         ...moduleMeta,
@@ -219,13 +217,26 @@ async function checkAvailabilityAttempt(config) {
     while (cursor.isBefore(config.endDate.add(1, "day"), "day")) {
       const dateKey = formatDate(cursor);
       const isPast = cursor.isBefore(today, "day");
+
+      if (isPast) {
+        results.push({
+          date: dateKey,
+          available: false,
+          reason: "past_date",
+          statusClass: null,
+          timeSlots: [],
+        });
+        cursor = cursor.add(1, "day");
+        continue;
+      }
+
       const slotResult = await fetchSlotsForDate(formatWidgetDate(cursor));
-      const available = slotResult.timeSlots.length > 0 && !isPast;
+      const available = slotResult.timeSlots.length > 0;
 
       results.push({
         date: dateKey,
         available,
-        reason: available ? "time_slots_available" : isPast ? "past_date" : "no_time_slots",
+        reason: available ? "time_slots_available" : "no_time_slots",
         statusClass: null,
         timeSlots: slotResult.timeSlots,
       });

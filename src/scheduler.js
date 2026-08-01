@@ -95,6 +95,11 @@ class WatchScheduler {
             `Range: ${watch.startDate} to ${watch.endDate}`,
             `Party size: ${watch.partySize || this.defaultPartySize}`,
             `Available dates: ${checkResult.availableDates.join(", ")}`,
+            "",
+            "Available time slots:",
+            ...checkResult.results
+              .filter((row) => row.available)
+              .map((row) => `${row.date}: ${(row.timeSlots || []).join(", ") || "<none>"}`),
             `Checked at: ${checkResult.checkedAt}`,
           ].join("\n");
 
