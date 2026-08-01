@@ -36,7 +36,7 @@ async function checkAvailabilityAttempt(config) {
   });
 
   try {
-    await page.goto(config.restaurantUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await page.goto(config.restaurantUrl, { waitUntil: "networkidle", timeout: 45000 });
 
     const frameHandle = await page.waitForSelector('iframe[src*="/reservation/module_restaurant/"]', {
       timeout: 45000,
@@ -67,23 +67,52 @@ async function checkAvailabilityAttempt(config) {
       }, config.partySize);
     }
 
-    const raw = await frame.evaluate(() => {
-      const highlight = window.highlight || {};
-      const normalized = {};
+    const extractHighlight = () =>
+      frame.evaluate(() => {
+        const highlight = window.highlight || {};
+        const normalized = {};
 
-      for (const [date, value] of Object.entries(highlight)) {
-        if (!Array.isArray(value)) {
-          continue;
+        for (const [date, value] of Object.entries(highlight)) {
+          if (!Array.isArray(value)) {
+            continue;
+          }
+
+          normalized[date] = {
+            selectable: Boolean(value[0]),
+            statusClass: (value[1] || "").toString(),
+          };
         }
 
-        normalized[date] = {
-          selectable: Boolean(value[0]),
-          statusClass: (value[1] || "").toString(),
-        };
-      }
+        return normalized;
+      });
 
-      return { availabilityMap: normalized };
-    });
+    // Read availability data twice with a delay to avoid false positives
+    // caused by async page updates that mark slots unavailable shortly after load.
+    const firstRead = await extractHighlight();
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const secondRead = await extractHighlight();
+
+    const stableMap = {};
+    for (const [date, first] of Object.entries(firstRead)) {
+      const second = secondRead[date];
+      if (second) {
+        // Only mark as selectable if both reads agree
+        stableMap[date] = {
+          selectable: first.selectable && second.selectable,
+          statusClass: second.statusClass,
+        };
+      } else {
+        stableMap[date] = first;
+      }
+    }
+    // Include any dates that only appeared in the second read
+    for (const [date, second] of Object.entries(secondRead)) {
+      if (!stableMap[date]) {
+        stableMap[date] = second;
+      }
+    }
+
+    const raw = { availabilityMap: stableMap };
 
     const results = [];
     let cursor = config.startDate.startOf("day");
