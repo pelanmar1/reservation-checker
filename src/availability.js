@@ -86,29 +86,30 @@ async function checkAvailabilityAttempt(config) {
         return normalized;
       });
 
-    // Read availability data twice with a delay to avoid false positives
-    // caused by async page updates that mark slots unavailable shortly after load.
-    const firstRead = await extractHighlight();
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const secondRead = await extractHighlight();
+    // Poll until availability data stabilizes (two consecutive reads match).
+    // The calendar widget asynchronously updates slots after initial render,
+    // so we must wait until it settles before trusting the data.
+    const POLL_INTERVAL_MS = 2000;
+    const MAX_POLLS = 6; // up to ~12s of waiting
+    let previousRead = await extractHighlight();
 
-    const stableMap = {};
-    for (const [date, first] of Object.entries(firstRead)) {
-      const second = secondRead[date];
-      if (second) {
-        // Only mark as selectable if both reads agree
-        stableMap[date] = {
-          selectable: first.selectable && second.selectable,
-          statusClass: second.statusClass,
-        };
-      } else {
-        stableMap[date] = first;
+    let stableMap = previousRead;
+    for (let poll = 1; poll <= MAX_POLLS; poll++) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      const currentRead = await extractHighlight();
+
+      const isStable = JSON.stringify(previousRead) === JSON.stringify(currentRead);
+      if (isStable) {
+        console.log(`Availability data stabilized after ${poll * POLL_INTERVAL_MS / 1000}s`);
+        stableMap = currentRead;
+        break;
       }
-    }
-    // Include any dates that only appeared in the second read
-    for (const [date, second] of Object.entries(secondRead)) {
-      if (!stableMap[date]) {
-        stableMap[date] = second;
+
+      previousRead = currentRead;
+      if (poll === MAX_POLLS) {
+        // Use the last read (most restrictive/up-to-date) if it never stabilizes
+        console.log(`Availability data did not stabilize after ${MAX_POLLS * POLL_INTERVAL_MS / 1000}s, using last read`);
+        stableMap = currentRead;
       }
     }
 
