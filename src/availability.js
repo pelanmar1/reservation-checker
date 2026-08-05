@@ -14,6 +14,14 @@ function formatWidgetDate(d) {
   return d.format("DD-MM-YYYY");
 }
 
+function normalizePartySize(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 2;
+  }
+  return Math.floor(parsed);
+}
+
 function nowInTz(timezone) {
   return dayjs().tz(timezone);
 }
@@ -89,6 +97,8 @@ async function checkAvailabilityAttempt(config) {
           restaurant: restaurantIndex >= 0 ? pathParts[restaurantIndex + 1] || "" : "",
           language: restaurantIndex >= 0 ? pathParts[restaurantIndex + 2] || "" : "",
           people: String(partySize > 0 ? partySize : peopleSelect?.value || 2),
+          selectedPartySizeAvailable:
+            !peopleSelect || Array.from(peopleSelect.options).some((option) => Number(option.value) === partySize),
           onlyThisPeople: getValue(['input[name="only_this_people"]', "#only_this_people"]),
           minPeople: getValue(['input[name="min_people"]', "#min_people"]),
           maxPeople:
@@ -114,6 +124,10 @@ async function checkAvailabilityAttempt(config) {
 
     if (!moduleMeta.restaurant) {
       throw new Error(`Could not determine CoverManager restaurant identifier from ${moduleUrl}`);
+    }
+
+    if (!moduleMeta.selectedPartySizeAvailable) {
+      throw new Error(`Configured party size ${config.partySize} is not available in the reservation widget.`);
     }
 
     const fetchSlotsForDate = async (widgetDate) =>
@@ -264,7 +278,7 @@ async function checkAvailability(input) {
     startDate: parseDate(input.startDate, "startDate"),
     endDate: parseDate(input.endDate, "endDate"),
     timezone: input.timezone || "America/Mexico_City",
-    partySize: Number(input.partySize || 2),
+    partySize: normalizePartySize(input.partySize),
     unavailableClasses: new Set(input.unavailableClasses || ["complete", "close_date"]),
   };
 
