@@ -31,9 +31,13 @@ function parseUnavailableClasses() {
     .filter(Boolean);
 }
 
+function formatPartySizes(row) {
+  return (row.availablePartySizes || []).length > 0 ? row.availablePartySizes.join(", ") : "<unknown>";
+}
+
 function buildSummary(config, checkResult) {
   const detailLines = checkResult.results.map((row) => {
-    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`;
+    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | partySizes=${formatPartySizes(row)} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`;
   });
 
   return [
@@ -52,7 +56,7 @@ function buildSummary(config, checkResult) {
 
 function buildDebugSummary(config, checkResult) {
   const detailLines = checkResult.results.map((row) => {
-    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`;
+    return `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | partySizes=${formatPartySizes(row)} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`;
   });
 
   return [
@@ -111,7 +115,7 @@ async function main() {
   console.log(`Checked at: ${checkResult.checkedAt}`);
   for (const row of checkResult.results) {
     console.log(
-      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | class=${row.statusClass || "<none>"} | reason=${row.reason}`
+      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | partySizes=${formatPartySizes(row)} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`
     );
   }
 

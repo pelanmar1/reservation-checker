@@ -15,6 +15,10 @@ function parseUnavailableClasses(raw) {
     .filter(Boolean);
 }
 
+function formatPartySizes(row) {
+  return (row.availablePartySizes || []).length > 0 ? row.availablePartySizes.join(", ") : "<unknown>";
+}
+
 class WatchScheduler {
   constructor(options) {
     this.timezone = options.timezone;
@@ -95,6 +99,13 @@ class WatchScheduler {
             `Range: ${watch.startDate} to ${watch.endDate}`,
             `Party size: ${watch.partySize || this.defaultPartySize}`,
             `Available dates: ${checkResult.availableDates.join(", ")}`,
+            "",
+            "Available time slots:",
+            ...checkResult.results
+              .map(
+                (row) =>
+                  `${row.date}: party sizes=${formatPartySizes(row)} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`
+              ),
             `Checked at: ${checkResult.checkedAt}`,
           ].join("\n");
 
