@@ -208,9 +208,16 @@ async function checkAvailabilityAttempt(config) {
 
           await new Promise((resolve) => setTimeout(resolve, 250));
 
+          let availablePartySizes = normalizePartySizes(peopleSelect);
+          const waitStart = Date.now();
+          while (availablePartySizes.length === 0 && Date.now() - waitStart < 5000) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            availablePartySizes = normalizePartySizes(peopleSelect);
+          }
+
           return {
             peopleSelect,
-            availablePartySizes: normalizePartySizes(peopleSelect),
+            availablePartySizes,
           };
         };
 
