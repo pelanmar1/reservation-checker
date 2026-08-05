@@ -359,7 +359,9 @@ async function checkAvailabilityAttempt(config) {
             : "party_size_unavailable",
         statusClass: null,
         timeSlots: slotResult.timeSlots,
-        availablePartySizes: uniqueSortedNumbers(slotResult.availablePartySizes || moduleMeta.initialPartySizes || []),
+        availablePartySizes: uniqueSortedNumbers(
+          slotResult.availablePartySizes.length > 0 ? slotResult.availablePartySizes : moduleMeta.initialPartySizes
+        ),
       });
 
       cursor = cursor.add(1, "day");
