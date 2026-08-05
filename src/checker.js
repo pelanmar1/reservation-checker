@@ -4,6 +4,10 @@ const { checkAvailability } = require("./availability");
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
+function formatPartySizes(row) {
+  return (row.availablePartySizes || []).length > 0 ? row.availablePartySizes.join(", ") : "<unknown>";
+}
+
 function parseUnavailableClasses() {
   return (process.env.UNAVAILABLE_CLASSES || "complete,close_date")
     .split(",")
@@ -35,7 +39,7 @@ async function main() {
 
   for (const row of result.results) {
     console.log(
-      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`
+      `${row.date} | ${row.available ? "AVAILABLE" : "unavailable"} | partySizes=${formatPartySizes(row)} | slots=${(row.timeSlots || []).join(", ") || "<none>"} | reason=${row.reason}`
     );
   }
 

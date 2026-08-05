@@ -26,6 +26,10 @@ function nowInTz(timezone) {
   return dayjs().tz(timezone);
 }
 
+function uniqueSortedNumbers(values) {
+  return [...new Set(values.filter((value) => Number.isFinite(value)).map((value) => Math.floor(value)))].sort((a, b) => a - b);
+}
+
 function parseDate(value, fieldName) {
   const parsed = dayjs(value, "YYYY-MM-DD", true);
   if (!parsed.isValid()) {
@@ -80,14 +84,10 @@ async function checkAvailabilityAttempt(config) {
         };
 
         const peopleSelect = document.querySelector("#people_search");
-        if (peopleSelect && partySize > 0) {
-          peopleSelect.value = String(partySize);
-          peopleSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        }
 
         const pathParts = new URL(window.location.href).pathname.split("/").filter(Boolean);
         const restaurantIndex = pathParts.indexOf("module_restaurant");
-        const maxPeopleOptions = peopleSelect
+        const         initialPartySizes = peopleSelect
           ? Array.from(peopleSelect.options)
               .map((option) => Number(option.value))
               .filter((value) => Number.isFinite(value))
@@ -97,13 +97,12 @@ async function checkAvailabilityAttempt(config) {
           restaurant: restaurantIndex >= 0 ? pathParts[restaurantIndex + 1] || "" : "",
           language: restaurantIndex >= 0 ? pathParts[restaurantIndex + 2] || "" : "",
           people: String(partySize > 0 ? partySize : peopleSelect?.value || 2),
-          selectedPartySizeAvailable:
-            !peopleSelect || Array.from(peopleSelect.options).some((option) => Number(option.value) === partySize),
+          initialPartySizes,
           onlyThisPeople: getValue(['input[name="only_this_people"]', "#only_this_people"]),
           minPeople: getValue(['input[name="min_people"]', "#min_people"]),
           maxPeople:
             getValue(['input[name="max_people"]', "#max_people"]) ||
-            (maxPeopleOptions.length > 0 ? String(Math.max(...maxPeopleOptions)) : ""),
+            (initialPartySizes.length > 0 ? String(Math.max(...initialPartySizes)) : ""),
           timeFix: getValue(['input[name="time_fix"]', "#time_fix"]),
           skipBlockedTables:
             getValue(['input[name="skip_blocked_tables"]', "#skip_blocked_tables"]) || "false",
@@ -126,18 +125,91 @@ async function checkAvailabilityAttempt(config) {
       throw new Error(`Could not determine CoverManager restaurant identifier from ${moduleUrl}`);
     }
 
-    if (!moduleMeta.selectedPartySizeAvailable) {
-      throw new Error(`Configured party size ${config.partySize} is not available in the reservation widget.`);
-    }
-
     const fetchSlotsForDate = async (widgetDate) =>
       await bookingContext.evaluate(async (request) => {
+        const normalizePartySizes = (selectElement) => {
+          if (!selectElement) {
+            return [];
+          }
+
+          return Array.from(selectElement.options)
+            .map((option) => Number(option.value))
+            .filter((value) => Number.isFinite(value) && value > 0);
+        };
+
+        const triggerDateSelection = () => {
+          const candidates = Array.from(
+            document.querySelectorAll("[data-date], [data-day], td, button, a, div, span")
+          );
+          const target = candidates.find((element) => {
+            const values = [
+              element.getAttribute("data-date"),
+              element.getAttribute("data-day"),
+              element.getAttribute("data-value"),
+              element.getAttribute("data-dia"),
+              element.getAttribute("onclick"),
+              element.textContent,
+            ]
+              .filter(Boolean)
+              .map((value) => String(value));
+
+            return values.some((value) => value.includes(request.date));
+          });
+
+          if (target) {
+            target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+            return true;
+          }
+
+          return false;
+        };
+
+        const waitForPeopleSelect = async () => {
+          const started = Date.now();
+          let peopleSelect = document.querySelector("#people_search");
+
+          if (!peopleSelect) {
+            triggerDateSelection();
+          }
+
+          while (!peopleSelect && Date.now() - started < 5000) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            peopleSelect = document.querySelector("#people_search");
+          }
+
+          if (!peopleSelect) {
+            return {
+              peopleSelect: null,
+              availablePartySizes: [],
+            };
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 250));
+
+          return {
+            peopleSelect,
+            availablePartySizes: normalizePartySizes(peopleSelect),
+          };
+        };
+
         const payload = new URLSearchParams();
+        const { peopleSelect, availablePartySizes } = await waitForPeopleSelect();
+        const requestedPartySizeAvailable =
+          availablePartySizes.length === 0 || availablePartySizes.includes(Number(request.people));
+
+        if (peopleSelect && requestedPartySizeAvailable) {
+          peopleSelect.value = String(request.people);
+          peopleSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+
         const fields = {
           language: request.language,
           restaurant: request.restaurant,
           dia: request.date,
-          people: request.people,
+          people: String(
+            requestedPartySizeAvailable ? request.people : availablePartySizes[0] || request.people
+          ),
           only_this_people: request.onlyThisPeople,
           min_people: request.minPeople,
           max_people: request.maxPeople,
@@ -217,6 +289,8 @@ async function checkAvailabilityAttempt(config) {
               .filter(Boolean);
 
         return {
+          availablePartySizes,
+          requestedPartySizeAvailable,
           timeSlots: [...new Set(fallbackSlots)],
         };
       }, {
@@ -245,14 +319,19 @@ async function checkAvailabilityAttempt(config) {
       }
 
       const slotResult = await fetchSlotsForDate(formatWidgetDate(cursor));
-      const available = slotResult.timeSlots.length > 0;
+      const available = slotResult.requestedPartySizeAvailable && slotResult.timeSlots.length > 0;
 
       results.push({
         date: dateKey,
         available,
-        reason: available ? "time_slots_available" : "no_time_slots",
+        reason: available
+          ? "time_slots_available"
+          : slotResult.requestedPartySizeAvailable
+            ? "no_time_slots"
+            : "party_size_unavailable",
         statusClass: null,
         timeSlots: slotResult.timeSlots,
+        availablePartySizes: uniqueSortedNumbers(slotResult.availablePartySizes || moduleMeta.initialPartySizes || []),
       });
 
       cursor = cursor.add(1, "day");
