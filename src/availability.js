@@ -85,12 +85,23 @@ async function checkAvailabilityAttempt(config) {
 
         const peopleSelect = document.querySelector("#people_search");
 
+        const parsePartySizeFromOption = (option) => {
+          const numericValue = Number(option.value);
+          if (Number.isFinite(numericValue) && numericValue > 0) {
+            return numericValue;
+          }
+
+          const label = (option.textContent || "").trim();
+          const match = label.match(/\d+/);
+          return match ? Number(match[0]) : NaN;
+        };
+
         const pathParts = new URL(window.location.href).pathname.split("/").filter(Boolean);
         const restaurantIndex = pathParts.indexOf("module_restaurant");
-        const         initialPartySizes = peopleSelect
+        const initialPartySizes = peopleSelect
           ? Array.from(peopleSelect.options)
-              .map((option) => Number(option.value))
-              .filter((value) => Number.isFinite(value))
+              .map(parsePartySizeFromOption)
+              .filter((value) => Number.isFinite(value) && value > 0)
           : [];
 
         return {
@@ -127,13 +138,24 @@ async function checkAvailabilityAttempt(config) {
 
     const fetchSlotsForDate = async (widgetDate) =>
       await bookingContext.evaluate(async (request) => {
+        const parsePartySizeFromOption = (option) => {
+          const numericValue = Number(option.value);
+          if (Number.isFinite(numericValue) && numericValue > 0) {
+            return numericValue;
+          }
+
+          const label = (option.textContent || "").trim();
+          const match = label.match(/\d+/);
+          return match ? Number(match[0]) : NaN;
+        };
+
         const normalizePartySizes = (selectElement) => {
           if (!selectElement) {
             return [];
           }
 
           return Array.from(selectElement.options)
-            .map((option) => Number(option.value))
+            .map(parsePartySizeFromOption)
             .filter((value) => Number.isFinite(value) && value > 0);
         };
 
@@ -198,9 +220,15 @@ async function checkAvailabilityAttempt(config) {
           availablePartySizes.length === 0 || availablePartySizes.includes(Number(request.people));
 
         if (peopleSelect && requestedPartySizeAvailable) {
-          peopleSelect.value = String(request.people);
-          peopleSelect.dispatchEvent(new Event("change", { bubbles: true }));
-          await new Promise((resolve) => setTimeout(resolve, 250));
+          const matchingOption = Array.from(peopleSelect.options).find(
+            (option) => parsePartySizeFromOption(option) === Number(request.people)
+          );
+
+          if (matchingOption) {
+            peopleSelect.value = matchingOption.value;
+            peopleSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
         }
 
         const fields = {
