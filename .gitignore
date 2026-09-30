@@ -4,3 +4,4 @@ node_modules/
 !.env.example
 playwright/.cache/
 data/*.json
+debug-artifacts/
