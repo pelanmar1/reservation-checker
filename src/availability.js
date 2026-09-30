@@ -235,6 +235,11 @@ async function selectDate(context, page, date) {
     return { selected: false, detail: `calendar headers seen: ${(marked.headerTexts || []).join(" | ") || "<none>"}` };
   }
 
+  const disabledClasses = ["ui-state-disabled", "ui-datepicker-unselectable", "disabled"];
+  if ((marked.classes || []).some((c) => disabledClasses.includes(c))) {
+    return { selected: true, notSelectable: true, strategy: marked.strategy, classes: marked.classes };
+  }
+
   await context.click('[data-rc-day="target"]', { force: true, timeout: 5000 });
   await waitForSettled(page);
   return { selected: true, strategy: marked.strategy, classes: marked.classes };
@@ -295,7 +300,17 @@ async function readDropdowns(context, hints) {
         className: String(option.className || ""),
       }));
 
-    const selects = Array.from(document.querySelectorAll("select"));
+    const isVisible = (el) => {
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return false;
+      }
+      return el.getClientRects().length > 0;
+    };
+
+    // Only consider dropdowns the user can actually see; the widget keeps hidden look-alikes
+    // (e.g. #people_search and the "Turno" select) that do not reflect real availability.
+    const selects = Array.from(document.querySelectorAll("select")).filter(isVisible);
     const isTimeSelect = (select) => readOptions(select).some((o) => timePattern.test(o.label) || timePattern.test(o.value));
 
     const findByHint = (hint, exclude) => {
@@ -303,12 +318,15 @@ async function readDropdowns(context, hints) {
       return pool.find((s) => hint.test(ownText(s))) || pool.find((s) => hint.test(contextText(s))) || null;
     };
 
-    const peopleSelect =
-      document.querySelector("select#people_search") || findByHint(peopleHint, (s) => isTimeSelect(s));
+    const knownPeople = document.querySelector("select#people-box-select");
+    const knownHour = document.querySelector("select#hour-box-select");
+    const peopleSelect = knownPeople || findByHint(peopleHint, (s) => isTimeSelect(s));
     const hourSelect =
-      findByHint(hourHint, (s) => s === peopleSelect) ||
+      knownHour ||
+      findByHint(hourHint, (s) => s === peopleSelect || !isTimeSelect(s)) ||
       selects.find((s) => s !== peopleSelect && isTimeSelect(s)) ||
       null;
+    const hourBox = document.querySelector("#hour_box");
 
     const parseSize = (option) => {
       const numeric = Number(option.value);
@@ -333,6 +351,7 @@ async function readDropdowns(context, hints) {
     }
 
     let hours = null;
+    let hourMessage = "";
     if (hourSelect) {
       hourSelect.setAttribute("data-rc-role", "hour");
       hours = readOptions(hourSelect)
@@ -343,9 +362,22 @@ async function readDropdowns(context, hints) {
           return timePattern.test(o.value) ? o.value : labelTime || "";
         })
         .filter(Boolean);
+    } else if (hourBox && isVisible(hourBox)) {
+      // No "Hora" dropdown rendered: the widget shows a message (e.g. "Sold out") or clickable time buttons instead.
+      hourMessage = (hourBox.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200);
+      hours = Array.from(hourBox.querySelectorAll("button, a, input, span, div, label"))
+        .filter((el) => el.children.length === 0 && isVisible(el))
+        .filter((el) => !el.disabled && el.getAttribute("aria-disabled") !== "true" && !/disabled/i.test(String(el.className || "")))
+        .map((el) => ((el.value || el.textContent || "").trim().match(/^([01]?\d|2[0-3]):[0-5]\d$/) || [])[0])
+        .filter(Boolean);
     }
 
-    return { people, hours, hoursSnapshot: hourSelect ? hourSelect.innerHTML : null };
+    return {
+      people,
+      hours,
+      hourMessage,
+      hoursSnapshot: hourSelect ? hourSelect.innerHTML : hourBox ? hourBox.innerHTML : null,
+    };
   }, hints);
 }
 
@@ -386,6 +418,11 @@ async function checkSingleDate(browser, config, date, artifactName) {
     row.statusClass = (dateSelection.classes || []).join(" ") || null;
     if (blockedClass) {
       row.reason = `date_marked_${blockedClass}`;
+      return row;
+    }
+
+    if (dateSelection.notSelectable) {
+      row.reason = "date_not_selectable";
       return row;
     }
 
@@ -437,7 +474,11 @@ async function checkSingleDate(browser, config, date, artifactName) {
 
     row.timeSlots = [...new Set(dropdowns.hours)];
     row.available = row.timeSlots.length > 0;
-    row.reason = row.available ? "time_slots_available" : "no_time_slots";
+    row.reason = row.available
+      ? "time_slots_available"
+      : dropdowns.hourMessage
+        ? `no_time_slots (${dropdowns.hourMessage})`
+        : "no_time_slots";
     return row;
   } finally {
     await saveArtifacts(page, config.artifactsDir, `${artifactName}-${row.date}`);
