@@ -108,6 +108,18 @@ You can optionally override date range and party size per run.
 
 - GitHub Actions mode does not host the web UI; config is managed in GitHub Variables/Secrets.
 - The workflow sends an email only when at least one date is available.
+- Every run uploads a `reservation-debug-<run id>` artifact with a screenshot and HTML snapshot per checked date, useful to verify what the checker saw.
+
+### How a date is checked
+
+For each date in the range the checker reloads the booking widget and mimics a user:
+
+1. Clicks the date in the calendar. If the day cell has one of the `UNAVAILABLE_CLASSES`, the date is unavailable.
+2. Reads the enabled options of the "Personas" dropdown. If `PARTY_SIZE` is not one of them, the date is unavailable (`party_size_unavailable`).
+3. Selects `PARTY_SIZE` and waits for the "Hora" dropdown to refresh.
+4. Collects the selectable times from "Hora" (disabled, `-1`, "Completo", "Lista de espera", etc. are ignored). The date is available only if at least one time remains.
+
+If any step cannot be completed (date, "Personas" or "Hora" not found), the date is reported as unavailable with a descriptive `reason` instead of triggering an alert.
 
 ## Deploy to Azure App Service
 
